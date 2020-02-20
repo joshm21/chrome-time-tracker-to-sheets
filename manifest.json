@@ -1,0 +1,12 @@
+{
+  "name": "Chrome Time Tracker to Sheets",
+  "version": "0.0.1",
+  "manifest_version": 2,
+  "description": "Automatically save time spent on websites in Chrome to Google Sheets",
+  "homepage_url": "https://github.com/josh-meinders/chrome-time-tracker-to-sheets",
+  "permissions": ["tabs", "idle"],
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": false
+  }
+}
