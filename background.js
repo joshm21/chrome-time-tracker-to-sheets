@@ -1,7 +1,8 @@
-const MINIMUM_SECONDS_THRESHOLD = 1;
+const DEFAULT_CHROME_IDLE_TIME = 60;
 const DOMAINS_TO_NOT_SUBMIT = [null, "newtab"];
+const MIN_SECONDS_ON_PAGE = 5;
 
-let DOMAIN = null;
+let STORED_DOMAIN = null;
 let START_DATETIME = null;
 
 chrome.tabs.onActivated.addListener(handleEvent);
@@ -13,14 +14,18 @@ chrome.idle.onStateChanged.addListener(handleEvent);
 async function handleEvent() {
   try {
     const activeTab = await getSingleActiveTab();
-    const window = await getWindow(activeTab.windowId);
-    if (window.focused) {
-      processActiveTab(activeTab);
-    } else {
-      onNoActiveTab();
+    await isWindowFocused(activeTab.windowId);
+    await isChromeActive();
+
+    const tabDomain = getDomain(activeTab.url);
+    if (tabDomain != STORED_DOMAIN) {
+      submitPreviousDomainToSheets();
+      STORED_DOMAIN = tabDomain;
+      START_DATETIME = new Date();
     }
   } catch (error) {
-    onNoActiveTab();
+    submitPreviousDomainToSheets();
+    STORED_DOMAIN = null;
   }
 }
 
@@ -38,56 +43,58 @@ const getSingleActiveTab = () => {
   });
 };
 
-const getWindow = windowId => {
+const isWindowFocused = windowId => {
   return new Promise(function(resolve, reject) {
     chrome.windows.get(windowId, function(window) {
-      if (window) {
+      if (window.focused) {
         resolve(window);
       } else {
-        reject(Error("Error getting window"));
+        reject(Error("Window is not focused"));
       }
     });
   });
 };
 
-function processActiveTab(activeTab) {
-  let urlString = activeTab.url;
-  let currentDomain = getDomain(urlString);
-  if (currentDomain != DOMAIN) {
-    submitData();
-    DOMAIN = currentDomain;
-    START_DATETIME = new Date();
-  }
-}
-
-function onNoActiveTab() {
-  submitData();
-  DOMAIN = null;
-}
+const isChromeActive = () => {
+  return new Promise(function(resolve, reject) {
+    chrome.idle.queryState(DEFAULT_CHROME_IDLE_TIME, function(idleState) {
+      if (idleState == "active") {
+        resolve(true);
+      } else {
+        reject(Error("Chrome is not active"));
+      }
+    });
+  });
+};
 
 function getDomain(urlString) {
-  let domain;
   try {
     let url = new URL(urlString);
-    domain = url.hostname;
+    return url.hostname;
   } catch (e) {
-    domain = null;
-  }
-  return domain;
-}
-
-function submitData() {
-  if (DOMAINS_TO_NOT_SUBMIT.includes(DOMAIN)) {
-    return;
-  }
-  let durationInSeconds = (new Date() - START_DATETIME) / 1000;
-  if (durationInSeconds > MINIMUM_SECONDS_THRESHOLD) {
-    submitToSheets(DOMAIN, durationInSeconds);
+    return null;
   }
 }
 
-function submitToSheets(domain, duration) {
-  console.log(`submitting ${domain} for ${duration} seconds`);
-  // let submitUrl = `https://docs.google.com/forms/d/e/1FAIpQLSecMPGUTWI7rinAmGfJSQE-Q13ZpPHLFSY4bL6Gvv8O7n2QxA/formResponse?&entry.607399626=${domain}&entry.1257183468=${duration}&submit=SUBMIT`;
-  // fetch(submitUrl, { mode: "no-cors" });
+function submitPreviousDomainToSheets() {
+  if (isDataValidToSubmit()) {
+    let duration = getDurationInSecondsSinceStart();
+    if (isPageDurationAboveMinimum(duration)) {
+      console.log(`submitting ${STORED_DOMAIN} for ${duration} seconds`);
+      let submitUrl = `https://docs.google.com/forms/d/e/1FAIpQLSecMPGUTWI7rinAmGfJSQE-Q13ZpPHLFSY4bL6Gvv8O7n2QxA/formResponse?&entry.607399626=${STORED_DOMAIN}&entry.1257183468=${duration}&submit=SUBMIT`;
+      fetch(submitUrl, { mode: "no-cors" });
+    }
+  }
+}
+
+function isDataValidToSubmit() {
+  return !DOMAINS_TO_NOT_SUBMIT.includes(STORED_DOMAIN);
+}
+
+function getDurationInSecondsSinceStart() {
+  return (new Date() - START_DATETIME) / 1000;
+}
+
+function isPageDurationAboveMinimum(duration) {
+  return duration > MIN_SECONDS_ON_PAGE;
 }
