@@ -62,6 +62,7 @@ const resetActiveTab = () => {
 }
 
 const isVideoPlaying = () => {
+  // alternative method: check if audio is playing? tab.audible == true
   console.log("checking for running video")
   const videoElement = document.getElementsByTagName('video')[0]
   return (videoElement !== undefined && videoElement.currentTime > 0 && !videoElement.paused && !videoElement.ended && videoElement.readyState > 2)
