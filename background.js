@@ -1,14 +1,6 @@
 const POLL_INTERVAL_SECONDS = 5
 const SECONDS_UNTIL_IDLE = 15
 
-let ACTIVE_TAB = {
-    start: null,
-    url: null,
-    domain: null,
-    title: null,
-    seconds: null
-  }
-
 const pollActiveTab = async () => {
   console.log("polling...")
   const state = await chrome.idle.queryState(SECONDS_UNTIL_IDLE)
@@ -40,14 +32,14 @@ const pollActiveTab = async () => {
       ACTIVE_TAB.seconds += POLL_INTERVAL_SECONDS
     } else {
       submitActiveTab()
-      ACTIVE_TAB.title = null
+      resetActiveTab()
     }
     return
   }
 
   if (state == "locked") {
     submitActiveTab()
-    ACTIVE_TAB.title = null
+    resetActiveTab()
     return
   }
 
@@ -59,11 +51,23 @@ const submitActiveTab = () => {
   console.log(ACTIVE_TAB)
 }
 
+const resetActiveTab = () => {
+  ACTIVE_TAB = {
+    start: null,
+    url: null,
+    domain: null,
+    title: null,
+    seconds: null
+  }
+}
+
 const isVideoPlaying = () => {
   console.log("checking for running video")
   const videoElement = document.getElementsByTagName('video')[0]
   return (videoElement !== undefined && videoElement.currentTime > 0 && !videoElement.paused && !videoElement.ended && videoElement.readyState > 2)
 }
+
+let ACTIVE_TAB = resetActiveTab()
 
 while (true) {
   console.log("looping")
