@@ -1,43 +1,37 @@
 const POLL_INTERVAL_SECONDS = 5
 const SECONDS_UNTIL_IDLE = 15
 
+
 const pollActiveTab = async () => {
   console.log("polling...")
-  const state = await chrome.idle.queryState(SECONDS_UNTIL_IDLE)
-  const currentTab = await chrome.tabs.query({"active": true, "lastFocusedWindow": true})[0]
+  const idleState = await getIdleState()
+  const currentTab = await getCurrentTab()
   const hasActiveTabChanged = currentTab.title == ACTIVE_TAB.title ? true : false
+  const isTabPlayingAudio = currentTab.audible
 
-  if (state == "active" && hasActiveTabChanged) {
+  if (idleState == "active" && !hasActiveTabChanged) {
+    incrementActiveTab()
+    return
+  }
+
+  if (idleState == "active" && hasActiveTabChanged) {
     submitActiveTab()
-    ACTIVE_TAB.start = new Date()
-    ACTIVE_TAB.url = currentTab.url || currentTab.pendingUrl
-    ACTIVE_TAB.domain = new URL(ACTIVE_TAB.url).hostname
-    ACTIVE_TAB.title = currentTab.title
-    ACTIVE_TAB.seconds = 0
+    updateActiveTab(currentTab)
+    return
+  }  
+
+  if (idleState == "idle" && !hasActiveTabChanged && isTabPlayingAudio) {
+    incrementActiveTab()
     return
   }
 
-  if (state == "active" && !hasActiveTabChanged) {
-    ACTIVE_TAB.seconds += POLL_INTERVAL_SECONDS
+  if (idleState == "idle" && !hasActiveTabChanged && !isTabPlayingAudio) {
+    submitActiveTab()
+    resetActiveTab()
     return
   }
 
-  if (state == "idle" && !hasActiveTabChanged) {
-    if (await chrome.scripting.executeScript(
-      {
-        target: {tabId: currentTab.id},
-        function: isVideoPlaying()
-      }
-    )) {
-      ACTIVE_TAB.seconds += POLL_INTERVAL_SECONDS
-    } else {
-      submitActiveTab()
-      resetActiveTab()
-    }
-    return
-  }
-
-  if (state == "locked") {
+  if (idleState == "locked") {
     submitActiveTab()
     resetActiveTab()
     return
@@ -51,6 +45,18 @@ const submitActiveTab = () => {
   console.log(ACTIVE_TAB)
 }
 
+const updateActiveTab = (tab) => {
+  ACTIVE_TAB.start = new Date()
+  ACTIVE_TAB.url = tab.url || tab.pendingUrl
+  ACTIVE_TAB.domain = new URL(ACTIVE_TAB.url).hostname
+  ACTIVE_TAB.title = tab.title
+  ACTIVE_TAB.seconds = 0
+}
+
+const incrementActiveTab = () => {
+  ACTIVE_TAB.seconds += POLL_INTERVAL_SECONDS
+}
+
 const resetActiveTab = () => {
   ACTIVE_TAB = {
     start: null,
@@ -61,17 +67,18 @@ const resetActiveTab = () => {
   }
 }
 
-const isVideoPlaying = () => {
-  // alternative method: check if audio is playing? tab.audible == true
-  console.log("checking for running video")
-  const videoElement = document.getElementsByTagName('video')[0]
-  return (videoElement !== undefined && videoElement.currentTime > 0 && !videoElement.paused && !videoElement.ended && videoElement.readyState > 2)
+const getIdleState = async () => {
+  return await chrome.idle.queryState(SECONDS_UNTIL_IDLE)
 }
 
-let ACTIVE_TAB = resetActiveTab()
+const getCurrentTab = async () => {
+  return await chrome.tabs.query({"active": true, "lastFocusedWindow": true})[0]
+}
 
+const initialTab = await getCurrentTab()
+let ACTIVE_TAB = updateActiveTab(initialTab)
 while (true) {
   console.log("looping")
-  await pollActiveTab()
   await new Promise(r => setTimeout(r, POLL_INTERVAL_SECONDS*1000));
+  await pollActiveTab()
 }
