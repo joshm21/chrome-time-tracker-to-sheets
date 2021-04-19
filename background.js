@@ -1,11 +1,14 @@
 const POLL_INTERVAL_SECONDS = 5
 const SECONDS_UNTIL_IDLE = 15
 
+let ACTIVE_TAB = {}
 
-const pollActiveTab = async () => {
+const pollActiveTab = () => {
   console.log("polling...")
-  const idleState = await getIdleState()
-  const currentTab = await getCurrentTab()
+  const idleState = getIdleState()
+  const currentTab = getCurrentTab()
+  console.log(currentTab.title)
+  console.log(ACTIVE_TAB.title)
   const hasActiveTabChanged = currentTab.title == ACTIVE_TAB.title ? true : false
   const isTabPlayingAudio = currentTab.audible
 
@@ -67,18 +70,32 @@ const resetActiveTab = () => {
   }
 }
 
-const getIdleState = async () => {
-  return await chrome.idle.queryState(SECONDS_UNTIL_IDLE)
+const getIdleState = () => {
+  return chrome.idle.queryState(SECONDS_UNTIL_IDLE, (idleState) => {
+    return idleState
+  })
 }
 
-const getCurrentTab = async () => {
-  return await chrome.tabs.query({"active": true, "lastFocusedWindow": true})[0]
+const getCurrentTab = () => {
+  return chrome.tabs.query({"active": true, "lastFocusedWindow": true}, (tabs) => {
+    return tabs[0]
+  })
 }
 
-const initialTab = await getCurrentTab()
-let ACTIVE_TAB = updateActiveTab(initialTab)
-while (true) {
-  console.log("looping")
-  await new Promise(r => setTimeout(r, POLL_INTERVAL_SECONDS*1000));
-  await pollActiveTab()
-}
+console.log("starting")
+ACTIVE_TAB = resetActiveTab()
+setInterval(pollActiveTab,POLL_INTERVAL_SECONDS*100)
+
+// if hasUrlChanged
+//   submit
+//   startNew
+//   return
+
+// if (idle + isAudioPlaying) || (active)
+//   increment
+//   return
+
+// if idle || locked
+//   submit
+//   reset
+//   return
